@@ -2,6 +2,7 @@ namespace digits;
 
 public abstract class Classifier
 {
+    private static readonly Record _defaultBest = new(0, new List<int>());
     public string Name { get; set; }
     public List<Record> TrainingData { get; set; }
     public abstract int Algorithm(int input, int test);
@@ -15,7 +16,7 @@ public abstract class Classifier
     public Prediction Predict(Record input)
     {
         int best_total = int.MaxValue;
-        Record best = new(0, new List<int>());
+        var best = _defaultBest;
         foreach (Record candidate in TrainingData)
         {
             int total = 0;

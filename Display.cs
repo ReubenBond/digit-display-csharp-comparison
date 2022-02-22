@@ -1,41 +1,51 @@
+using System.Text;
+
 namespace digit_console;
 
 public class Display
 {
-    public static string GetImagesAsString(List<int> image1, List<int> image2)
+    public static void GetImagesAsString(StringBuilder res, List<int> image1, List<int> image2)
     {
-        var first_image = GetImageAsString(image1);
-        var first = first_image.Split("\n");
-        var second_image = GetImageAsString(image2);
-        var second = second_image.Split("\n");
-        string result = "";
-        for (int i = 0; i < 28; i++)
+        var first = new ImageLineStringer(image1);
+        var second = new ImageLineStringer(image2);
+
+        var hasMore = true;
+        while (hasMore)
         {
-            result += first[i];
-            result += " | ";
-            result += second[i];
-            result += "\n";
+            hasMore &= first.WriteNextLine(res);
+            res.Append(" | ");
+            hasMore &= second.WriteNextLine(res);
+            res.Append("\n");
         }
-        return result;
     }
 
-    public static string GetImageAsString(List<int> image)
+    private struct ImageLineStringer
     {
-        string result = "";
-        int count = 0;
-        foreach (int pixel in image)
+        private int _pixel;
+        private List<int> _image;
+        public ImageLineStringer(List<int> image)
         {
-            if (count % 28 == 0 && count != 0)
-            {
-                result += "\n";
-            }
-            var output_char = GetDisplayCharForPixel(pixel);
-            result += output_char;
-            result += output_char;
-            count++;
+            _pixel = 0;
+            _image = image;
         }
-        result += "\n";
-        return result;
+
+        public bool WriteNextLine(StringBuilder res)
+        {
+            while (_pixel < _image.Count)
+            {
+                var output_char = GetDisplayCharForPixel(_image[_pixel]);
+                res.Append(output_char);
+                res.Append(output_char);
+                ++_pixel;
+
+                if (_pixel % 28 == 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
     }
 
     private static char GetDisplayCharForPixel(int pixel)

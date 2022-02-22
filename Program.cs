@@ -2,11 +2,16 @@
 using digit_console;
 using System.Threading.Channels;
 using CommandLine;
+using System.Text;
+
+
+string BlankSpace = new string(' ', 46);
+string ResultLine = new string('=', 115);
 
 int offset = 0;
 int count = 10;
 string classifier_option = "";
-int threads = 6;
+int threads = Environment.ProcessorCount;
 
 CommandLine.Parser.Default.ParseArguments<Configuration>(args)
     .WithParsed(c =>
@@ -42,10 +47,10 @@ Classifier classifier = classifier_option
 
 var start = DateTime.Now;
 
-var channel = Channel.CreateUnbounded<Prediction>();
+var channel = Channel.CreateUnbounded<Prediction>(new UnboundedChannelOptions { SingleReader = true });
 var listener = Listen(channel.Reader, errors);
 
-var producer = Produce(channel.Writer, classifier, validation, threads);
+var producer = Produce(channel.Writer, classifier, validation, Environment.ProcessorCount);
 await producer;
 
 await listener;
@@ -56,9 +61,10 @@ PrintSummary(classifier, offset, count, elapsed, errors.Count);
 Console.WriteLine("Press any key to show errors...");
 Console.ReadLine();
 
+var sb = new StringBuilder();
 foreach (var item in errors)
 {
-    DisplayImages(item, true);
+    DisplayImages(sb, item, true);
 }
 
 PrintSummary(classifier, offset, count, elapsed, errors.Count);
@@ -79,34 +85,46 @@ static async Task Produce(ChannelWriter<Prediction> writer,
     writer.Complete();
 }
 
-static async Task Listen(ChannelReader<Prediction> reader,
-    List<Prediction> log)
+async Task Listen(ChannelReader<Prediction> reader, List<Prediction> log)
 {
-    await foreach (Prediction prediction in reader.ReadAllAsync())
+    StringBuilder result = new();
+    while (await reader.WaitToReadAsync())
     {
-        DisplayImages(prediction, false);
-        if (prediction.Actual.Value != prediction.Predicted.Value)
+        while (reader.TryRead(out var prediction))
         {
-            log.Add(prediction);
+            DisplayImages(result, prediction, false);
+            if (prediction.Actual.Value != prediction.Predicted.Value)
+            {
+                log.Add(prediction);
+            }
         }
     }
 }
 
-static void DisplayImages(Prediction prediction, bool scroll)
+void DisplayImages(StringBuilder result, Prediction prediction, bool scroll)
 {
+    result.Append("Actual: ");
+    result.Append(prediction.Actual.Value);
+    result.Append(' ');
+    result.Append(BlankSpace);
+    result.Append(" | Predicted: ");
+    result.Append(prediction.Predicted.Value);
+    result.AppendLine();
+    Display.GetImagesAsString(result, prediction.Actual.Image, prediction.Predicted.Image);
+    result.AppendLine();
+    result.Append(ResultLine);
+
     if (!scroll)
     {
         Console.SetCursorPosition(0, 0);
     }
-    var image = Display.GetImagesAsString(prediction.Actual.Image, prediction.Predicted.Image);
-    var output = $"Actual: {prediction.Actual.Value} ";
-    output += new string(' ', 46);
-    output += $" | Predicted: {prediction.Predicted.Value}";
-    output += "\n";
-    output += image;
-    output += "\n";
-    output += new string('=', 115);
-    Console.WriteLine(output);
+
+    foreach (var chunk in result.GetChunks())
+    {
+        Console.Write(chunk);
+    }
+    Console.WriteLine();
+    result.Clear();
 }
 
 static void PrintSummary(Classifier classifier, int offset, int count, TimeSpan elapsed, int total_errors)
