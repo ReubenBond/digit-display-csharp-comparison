@@ -13,26 +13,18 @@ public class Classifier
     {
         int best_total = int.MaxValue;
         var best = _defaultBest;
-        var inputSpan = CollectionsMarshal.AsSpan(input.Image);
-        if (inputSpan.Length < OrdainedLength)
-        {
-            ThrowInvalidInput();
-        }
 
+        var inputList = input.Image;
         foreach (Record candidate in trainingData)
         {
-            var candidateSpan = CollectionsMarshal.AsSpan(candidate.Image);
-            if (candidateSpan.Length < OrdainedLength)
-            {
-                ThrowInvalidInput();
-            }
-
+            var candidateList = candidate.Image;
             int total = 0;
             for (int i = 0; i < OrdainedLength; i++)
             {
-                int diff = classifier.Algorithm(inputSpan[i], candidateSpan[i]);
+                int diff = classifier.Algorithm(inputList[i], candidateList[i]);
                 total += diff;
             }
+
             if (total < best_total)
             {
                 best_total = total;
