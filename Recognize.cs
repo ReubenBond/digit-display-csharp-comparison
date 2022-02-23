@@ -1,28 +1,36 @@
+using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+
 namespace digits;
 
-public abstract class Classifier
+public class Classifier
 {
+    private const int OrdainedLength = 784;
     private static readonly Record _defaultBest = new(0, new List<int>());
-    public string Name { get; set; }
-    public List<Record> TrainingData { get; set; }
-    public abstract int Algorithm(int input, int test);
 
-    public Classifier(string name, List<Record> trainingData)
-    {
-        Name = name;
-        TrainingData = trainingData;
-    }
-
-    public Prediction Predict(Record input)
+    internal static Prediction Predict<TClassifier>(Record input, TClassifier classifier, List<Record> trainingData) where TClassifier : IClassifier
     {
         int best_total = int.MaxValue;
         var best = _defaultBest;
-        foreach (Record candidate in TrainingData)
+        var inputSpan = CollectionsMarshal.AsSpan(input.Image);
+        if (inputSpan.Length < OrdainedLength)
         {
-            int total = 0;
-            for (int i = 0; i < 784; i++)
+            ThrowInvalidInput();
+        }
+
+        foreach (Record candidate in trainingData)
+        {
+            var candidateSpan = CollectionsMarshal.AsSpan(candidate.Image);
+            if (candidateSpan.Length < OrdainedLength)
             {
-                int diff = Algorithm(input.Image[i], candidate.Image[i]);
+                ThrowInvalidInput();
+            }
+
+            int total = 0;
+            for (int i = 0; i < OrdainedLength; i++)
+            {
+                int diff = classifier.Algorithm(inputSpan[i], candidateSpan[i]);
                 total += diff;
             }
             if (total < best_total)
@@ -34,29 +42,61 @@ public abstract class Classifier
 
         return new Prediction(input, best);
     }
+
+    [DoesNotReturn]
+    private static void ThrowInvalidInput() => throw new ArgumentException("Input is of an insufficient length");
 }
 
-public class ManhattanClassifier : Classifier
+public interface IClassifier
 {
-    public ManhattanClassifier(List<Record> training_data) :
-        base("Manhattan Classifier", training_data)
+    string Name { get; }
+
+    int Algorithm(int input, int test);
+
+    Prediction Predict(Record input);
+}
+
+public readonly struct ManhattanClassifier : IClassifier
+{
+    private readonly List<Record> _trainingData;
+
+    public ManhattanClassifier(List<Record> trainingData)
     {
+        _trainingData = trainingData;
     }
 
-    public override int Algorithm(int input, int test)
+    public string Name => "Manhattan Classifier";
+
+    public Prediction Predict(Record input)
+    {
+        return Classifier.Predict(input, this, _trainingData);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int Algorithm(int input, int test)
     {
         return Math.Abs(input - test);
     }
 }
 
-public class EuclideanClassifier : Classifier
+public readonly struct EuclideanClassifier : IClassifier
 {
-    public EuclideanClassifier(List<Record> training_data)
-        : base("Euclidean Classifier", training_data)
+    private readonly List<Record> _trainingData;
+
+    public EuclideanClassifier(List<Record> trainingData)
     {
+        _trainingData = trainingData;
     }
 
-    public override int Algorithm(int input, int test)
+    public string Name => "Euclidean Classifier";
+
+    public Prediction Predict(Record input)
+    {
+        return Classifier.Predict(input, this, _trainingData);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public int Algorithm(int input, int test)
     {
         var diff = input - test;
         return diff * diff;

@@ -11,8 +11,5 @@ public class Configuration
     public int Count { get; set; }
 
     [Option(longName: "classifier", Required = false, HelpText = "Classifier to use (default: 'euclidean')", Default = "euclidean")]
-    public string Classifier { get; set; }
-
-    [Option(shortName: 't', longName: "threads", Required = false, HelpText = "Number of threads to use (default: 6)", Default = 6)]
-    public int Threads { get; set; }
+    public string? Classifier { get; set; }
 }

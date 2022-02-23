@@ -11,16 +11,13 @@ string ResultLine = new string('=', 115);
 int offset = 0;
 int count = 10;
 string classifier_option = "";
-int threads = Environment.ProcessorCount;
 
 CommandLine.Parser.Default.ParseArguments<Configuration>(args)
     .WithParsed(c =>
     {
         offset = c.Offset;
         count = c.Count;
-        threads = c.Threads;
-        classifier_option = c.Classifier.ToLower()
-        switch
+        classifier_option = c.Classifier.ToLower() switch
         {
             "euclidean" => "euclidean",
             "manhattan" => "manhattan",
@@ -37,7 +34,7 @@ var (training, validation) = FileLoader.GetData("train.csv", offset, count);
 Console.Clear();
 Console.WriteLine("Data Load Complete...");
 
-Classifier classifier = classifier_option
+IClassifier classifier = classifier_option
     switch
 {
     "euclidean" => new EuclideanClassifier(training),
@@ -50,14 +47,13 @@ var start = DateTime.Now;
 var channel = Channel.CreateUnbounded<Prediction>(new UnboundedChannelOptions { SingleReader = true });
 var listener = Listen(channel.Reader, errors);
 
-var producer = Produce(channel.Writer, classifier, validation, Environment.ProcessorCount);
+var producer = Produce(channel.Writer, classifier, validation);
 await producer;
-
 await listener;
 
 var elapsed = DateTime.Now - start;
 
-PrintSummary(classifier, offset, count, elapsed, errors.Count);
+PrintSummary(classifier.Name, offset, count, elapsed, errors.Count);
 Console.WriteLine("Press any key to show errors...");
 Console.ReadLine();
 
@@ -67,19 +63,25 @@ foreach (var item in errors)
     DisplayImages(sb, item, true);
 }
 
-PrintSummary(classifier, offset, count, elapsed, errors.Count);
+PrintSummary(classifier.Name, offset, count, elapsed, errors.Count);
 
 
-static async Task Produce(ChannelWriter<Prediction> writer,
-    Classifier classifier, List<Record> validation, int threads)
+static async Task Produce(
+    ChannelWriter<Prediction> writer,
+    IClassifier classifier,
+    List<Record> validation)
 {
     await Parallel.ForEachAsync(
         validation,
-        new ParallelOptions() { MaxDegreeOfParallelism = threads },
-        async (imageData, token) =>
+        (imageData, token) =>
         {
             var result = classifier.Predict(new(imageData.Value, imageData.Image));
-            await writer.WriteAsync(result, token);
+            if (writer.TryWrite(result))
+            {
+                return default;
+            }
+
+            return writer.WriteAsync(result, token);
         });
 
     writer.Complete();
@@ -127,9 +129,9 @@ void DisplayImages(StringBuilder result, Prediction prediction, bool scroll)
     result.Clear();
 }
 
-static void PrintSummary(Classifier classifier, int offset, int count, TimeSpan elapsed, int total_errors)
+static void PrintSummary(string name, int offset, int count, TimeSpan elapsed, int total_errors)
 {
-    Console.WriteLine($"Using {classifier.Name} -- Offset: {offset}   Count: {count}");
+    Console.WriteLine($"Using {name} -- Offset: {offset}   Count: {count}");
     Console.WriteLine($"Total time: {elapsed}");
     Console.WriteLine($"Total errors: {total_errors}");
 }
